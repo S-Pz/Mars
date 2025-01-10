@@ -33,10 +33,6 @@ def fetch_recent_posts_from_reddit(time_limit_hours=3):
 
             post_info = {
                 "title": submission.title,
-                "id": submission.id,
-                "author": str(submission.author),
-                "url": submission.url,
-                "upvote_ratio": submission.upvote_ratio,
                 "subredidt" : str(submission.subreddit),
                 "comments" : top_level_comment.body,
                 "comments_auth": str(top_level_comment.author)
