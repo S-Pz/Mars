@@ -21,3 +21,7 @@ __pycache__/
 
 #Files
 *.pdf
+
+#Environment
+.env/
+.venv/
