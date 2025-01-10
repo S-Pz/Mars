@@ -1,7 +1,5 @@
 import praw
 import json
-import asyncio
-import asyncpraw
 
 import pandas as pd
 import matplotlib.pyplot as plt
