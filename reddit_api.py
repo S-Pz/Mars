@@ -39,7 +39,7 @@ def fetch_recent_posts_from_reddit(time_limit_hours=3):
 
         # Adicione um intervalo para evitar a limitação de taxa
         # Salve todos os posts em um único arquivo JSON
-        with open(f'posts_data.json', 'a', encoding='utf-8') as f:
+        with open(f'posts_11-01.json', 'a', encoding='utf-8') as f:
             json.dump(posts_data, f, ensure_ascii=False, indent=4)
         
         posts_data = []
