@@ -4,6 +4,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sentence_transformers import SentenceTransformer
 from sklearn.decomposition import LatentDirichletAllocation
 
+#nltk para tfidf 
+# usar as funcionlidades da lib
 with open("game_awards_filtered.json", "r") as file:
     data = json.load(file)
 
