@@ -21,6 +21,8 @@ __pycache__/
 
 #Files
 *.pdf
+*.bin
+*.gz
 
 #Environment
 .env/

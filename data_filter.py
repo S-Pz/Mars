@@ -6,18 +6,18 @@ import matplotlib.pyplot as plt
 
 # === 1. Leitura dos Dados ===
 # Supondo que os dados brutos estejam em um arquivo JSON "reddit_data.json"
-with open("posts_data2.json", "r") as infile:
+with open("./entrega_4/posts_data.json", "r") as infile:
     dataset = json.load(infile)
 
 print(f"Total de registros carregados: {len(dataset)}")
 
 # === 2. Definição de palavras-chave ===
-keywords = [
-    "game awards", "nominee", "winner", "goty", 
-    "best game", "awards ceremony", "TGA", 
-    "best game award", "best game awards", "best game award ceremony",
-    "astro bot", "Nicolas Doucet", "Black Myth Wukong", "Elden Ring"
-]
+keywords = ['DonaldTrump', 'canada', 'facebook', 'instagram',
+              'eua', 'sa','Elon Musk', 'joebiden','Kamala Harris',
+              'Lindsey Graham','greenland','island','acquire',
+              'purchase','buy','military','control','markzuckerberg',
+              'zuckerberg','trump','Obama'
+            ]
 
 # === 3. Filtro dos dados ===
 def contains_keywords(text, keywords):
@@ -27,13 +27,13 @@ def contains_keywords(text, keywords):
 filtered_data = []
 
 for entry in dataset:
-    if contains_keywords(entry["title"], keywords) or contains_keywords(entry["comments"], keywords):
+    if contains_keywords(entry["comments"], keywords):
         filtered_data.append(entry)
 
 print(f"Total de registros filtrados: {len(filtered_data)}")
 
 # Salvando os dados filtrados
-with open("game_awards_filtered.json", "w") as outfile:
+with open("game_awards_filtered2.json", "w") as outfile:
     json.dump(filtered_data, outfile, indent=4)
 
 print("Dados filtrados salvos em 'game_awards_filtered.json'")
