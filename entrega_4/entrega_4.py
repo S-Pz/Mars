@@ -1,20 +1,29 @@
-import nltk, json, re
+import nltk, json, re, gensim
+import fasttext.util
 import pandas as pd
+
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from sklearn.feature_extraction.text import TfidfVectorizer
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
+from gensim.models import Word2Vec
 
 ####################### Pré-processamento ##########################
+# fasttext.util.download_model('en', if_exists='ignore')  # English
+# ft = fasttext.load_model('cc.en.300.bin')
 
 nltk.download('stopwords')
 nltk.download('punkt_tab')
+nltk.download('vader_lexicon')
+
+analyzer = SentimentIntensityAnalyzer()
 
 with open("posts_data.json", "r") as file:
     dataset = json.load(file)
 
 stop_words = set(stopwords.words('english'))
 
-key_words = ['DonaldTrump', 'canada', 'facebook', 'instagram',
+key_words = [ 'canada', 'facebook', 'instagram',
               'eua', 'sa','Elon Musk', 'joebiden','Kamala Harris',
               'Lindsey Graham','greenland','island','acquire',
               'purchase','buy','military','control','markzuckerberg',
@@ -33,41 +42,35 @@ negative_words = [
     'fat','ugly','stupid','dumb','idiot','fool','foolish','dull','dullard',
 ]
 
-def contains_keywords(text, keywords):
-    pattern = "|".join(keywords)  # Cria um padrão como "game awards|nominee|winner|..."
-    return bool(re.search(pattern, text, re.IGNORECASE))
-
-filtred_words = []
-filtred_words_2 = []
+filtred_sentences = []
 
 for entry in dataset:
-    
+
     words_tokens_comments = word_tokenize(entry['comments'])
-
-    for w in words_tokens_comments:
-        if w.lower() not in stop_words and re.match(r'^[a-zA-Z]+$', w):
-            #clean_text = ''.join(w)
-            filtred_words.append(w)
     
-for word in filtred_words:
-    if contains_keywords(word.lower(), key_words):
-       filtred_words_2.append(word)
+    filtered_words = [
+        w.lower() for w in words_tokens_comments 
+        if w.lower() not in stop_words and re.match(r'^[a-zA-Z]+$', w)
+    ]
+    if filtered_words: 
+        filtred_sentences.append(filtered_words)
 
-print(filtred_words_2)
+####################### Word2Vec #####################################################
+model = Word2Vec(filtred_sentences, vector_size=100, window=5, min_count=5, workers=4)
 
-filtred_words = []
+valid_key_words = [word for word in key_words if word in model.wv]
+valid_negative_words = [word for word in negative_words if word in model.wv]
 
-for word in filtred_words_2:
-    if word.lower() in negative_words:
-        filtred_words.append(word)
+if valid_key_words:
+    similar_words = model.wv.most_similar(positive=valid_key_words, negative=valid_negative_words)
+    relation = [(item[0], round(item[1], 2)) for item in similar_words]
+    print (relation)
+    print("\n🔹 Palavras mais associadas às Key Words:")
+    for word, score in relation:
+        print(f"{word}: {score}")
 
-print("lenght",len(filtred_words))
-
-
-####################### TF-IDF ##########################
-# vectorizer = TfidfVectorizer()
-# tfidf_matrix = vectorizer.fit_transform(filtred_words)
-
-# tfidf_df = pd.DataFrame(
-#     tfidf_matrix.toarray(), columns=vectorizer.get_feature_names_out()
-# )
+    print("\n📊 🔥 Análise de Sentimento das Palavras Relacionadas:")
+    for word, score in relation:
+        sentiment_score = analyzer.polarity_scores(word)['compound']
+        sentiment = "Positivo" if sentiment_score > 0 else "Negativo" if sentiment_score < 0 else "Neutro"
+        print(f"Palavra: {word} - Score: {sentiment_score} ({sentiment})")
