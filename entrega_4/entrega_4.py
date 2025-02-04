@@ -52,25 +52,48 @@ for entry in dataset:
         filtred_sentences.append(filtered_words)
 
 print(filtred_sentences)
+
 #################################### Word2Vec #####################################################
-model = Word2Vec(filtred_sentences, vector_size=100, window=10, min_count=1, workers=4, sg=1)
+all_similar_words = []  # Lista para armazenar todas as palavras similares
 
-valid_key_words = [word for word in key_words if word in model.wv]
-valid_negative_words = [word for word in negative_words if word in model.wv]
+for i, filtred_list in enumerate(filtred_sentences):
+    model = Word2Vec([filtred_list], vector_size=100, window=10, min_count=1, workers=4, sg=1)  # Treina um modelo para cada conjunto de frases
+    valid_key_words = [word for word in key_words if word in model.wv]
+    valid_negative_words = [word for word in negative_words if word in model.wv]
 
-if valid_key_words:
-    similar_words = model.wv.most_similar(positive=valid_key_words, negative=valid_negative_words)
-    relation = [(item[0], round(item[1], 2)) for item in similar_words]
-    print (relation)
-    #colocar um para relacionar com todos tipo o item 0 com o 1,2,3,4,5,6,7,8,9 e assim por diante
-    print("\n🔹 Palavras mais associadas às Key Words:")
-    for word, score in relation:
-        print(f"{word}: {score}")
+    if valid_key_words:
+        try:
+            similar_words = model.wv.most_similar(positive=valid_key_words, negative=valid_negative_words)
+            relation = [(item[0], round(item[1], 2)) for item in similar_words]
+            all_similar_words.extend(relation)  # Adiciona os resultados à lista geral
 
-    for word, score in relation:
-        related_sentences = [entry['comments'] for entry in dataset if word in entry['comments']]
-        combined_text = " ".join(related_sentences)
-        sentiment_score = analyzer.polarity_scores(combined_text)['compound']
-        sentiment = "Positivo" if sentiment_score > 0 else "Negativo" if sentiment_score < 0 else "Neutro"
-        
-        print(f"Palavra: {word} - Score: {sentiment_score} ({sentiment})")
+            print(f"\n🔹 Lista {i + 1} - Palavras mais associadas:")
+            for word, score in relation:
+                print(f"{word}: {score}")
+
+        except KeyError:
+            print(f"\n⚠️ Lista {i + 1}: Não há palavras suficientes para calcular similaridade.")
+            continue  # Caso não tenha palavras suficientes, ignora e segue para a próxima lista
+
+# Remove duplicatas e ordena pela pontuação de similaridade média
+from collections import defaultdict
+
+word_scores = defaultdict(list)
+for word, score in all_similar_words:
+    word_scores[word].append(score)
+
+# Calcula a média da pontuação de similaridade para cada palavra
+aggregated_scores = [(word, round(sum(scores) / len(scores), 2)) for word, scores in word_scores.items()]
+aggregated_scores.sort(key=lambda x: x[1], reverse=True)  # Ordena do mais similar para o menos similar
+
+# Exibe os resultados finais agregados
+print("\n🔹 Palavras mais associadas ao conjunto completo:")
+for word, score in aggregated_scores:
+    print(f"{word}: {score}")
+
+    related_sentences = [entry['comments'] for entry in dataset if word in entry['comments']]
+    combined_text = " ".join(related_sentences)
+    sentiment_score = analyzer.polarity_scores(combined_text)['compound']
+    sentiment = "Positivo" if sentiment_score > 0 else "Negativo" if sentiment_score < 0 else "Neutro"
+
+    print(f"Palavra: {word} - Score: {sentiment_score} ({sentiment})")
