@@ -1,77 +1,149 @@
-import json
+import nltk, json, re, gensim
+import fasttext.util
+import pandas as pd
 import networkx as nx
-import nltk
-import matplotlib.pyplot as plt
-import community  # Pacote python-louvain
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+from sklearn.feature_extraction.text import TfidfVectorizer
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
-from collections import defaultdict
-from itertools import combinations
+from gensim.models import Word2Vec
 
-# Baixar recursos do NLTK
+####################### Pré-processamento ##########################
+# fasttext.util.download_model('en', if_exists='ignore')  # English
+# ft = fasttext.load_model('cc.en.300.bin')
+
+nltk.download('stopwords')
+nltk.download('punkt_tab')
 nltk.download('vader_lexicon')
 
-# Inicializar analisador de sentimento
 analyzer = SentimentIntensityAnalyzer()
 
-# Carregar os dados do JSON
 with open("posts_data.json", "r") as file:
     dataset = json.load(file)
 
-# Criar o grafo
+stop_words = set(stopwords.words('english'))
+
+key_words = [ 'canada', 'facebook', 'instagram','eua', 'usa','Elon Musk', 'joebiden','Kamala Harris',
+              'Lindsey Graham','greenland','island','acquire','purchase','buy','military','control',
+              'markzuckerberg','zuckerberg','trump','Obama',"corrupt","biased", "lies","racist","fake"
+            ]
+
+negative_words = [
+    "corrupt", "unfair", "biased", "lies", "dishonest", "scam", "fraud","hate", "terrible", "awful",
+    "disgusting", "nonsense", "rigged","manipulated", "fake", "wrong", "unacceptable", "shameful", 
+    "problematic","disgrace", "toxic", "incompetent", "hypocrite", "crooked", "failing","horrible",
+    "evil","selfish", "ruined", "destroyed", "overrated", "controversial", "dangerous", "threat",
+    "misleading", "cheated","broken", "backward", "divisive", "outdated", "pathetic", "ignorant", 
+    "arrogant", "oppressive", "exploitative", "despicable", "racist","crazy",'fat','ugly','stupid',
+    'dumb','idiot','fool','foolish','dull','dullard'
+]
+
+author_topic_map = {}
+
+filtred_sentences = []
+
+for entry in dataset:
+    author = entry['comments_auth']
+
+    words_tokens_comments = word_tokenize(entry['comments'])
+    
+    filtered_words = [
+        w.lower() for w in words_tokens_comments 
+        if w.lower() not in stop_words and re.match(r'^[a-zA-Z]+$', w)
+    ]
+    
+    related_keywords = [word for word in filtered_words if word in key_words]
+
+    if filtered_words: 
+        filtred_sentences.append(filtered_words)
+    
+    if related_keywords:
+        if author not in author_topic_map:
+            author_topic_map[author] = set()
+        author_topic_map[author].update(related_keywords)
+
+print(author_topic_map)
+#################################### Word2Vec #####################################################
+all_similar_words = []  # Lista para armazenar todas as palavras similares
+
+for i, filtred_list in enumerate(filtred_sentences):
+    model = Word2Vec([filtred_list], vector_size=100, window=10, min_count=1, workers=4, sg=1)  # Treina um modelo para cada conjunto de frases
+    valid_key_words = [word for word in key_words if word in model.wv]
+    valid_negative_words = [word for word in negative_words if word in model.wv]
+
+    if valid_key_words:
+        try:
+            similar_words = model.wv.most_similar(positive=valid_key_words, negative=valid_negative_words)
+            relation = [(item[0], round(item[1], 2)) for item in similar_words]
+            all_similar_words.extend(relation)  # Adiciona os resultados à lista geral
+
+            print(f"\n🔹 Lista {i + 1} - Palavras mais associadas:")
+            for word, score in relation:
+                print(f"{word}: {score}")
+
+        except KeyError:
+            print(f"\n⚠️ Lista {i + 1}: Não há palavras suficientes para calcular similaridade.")
+            continue  # Caso não tenha palavras suficientes, ignora e segue para a próxima lista
+
+# Remove duplicatas e ordena pela pontuação de similaridade média
+from collections import defaultdict
+
+word_scores = defaultdict(list)
+for word, score in all_similar_words:
+    word_scores[word].append(score)
+
+# Calcula a média da pontuação de similaridade para cada palavra
+aggregated_scores = [(word, round(sum(scores) / len(scores), 2)) for word, scores in word_scores.items()]
+aggregated_scores.sort(key=lambda x: x[1], reverse=True)  # Ordena do mais similar para o menos similar
+
+# Exibe os resultados finais agregados
+print("\n🔹 Palavras mais associadas ao conjunto completo:")
+
+for word, score in aggregated_scores:
+    print(f"{word}: {score}")
+
+    related_sentences = [entry['comments'] for entry in dataset if word in entry['comments']]
+    combined_text = " ".join(related_sentences)
+    sentiment_score = analyzer.polarity_scores(combined_text)['compound']
+    sentiment = "Positivo" if sentiment_score > 0 else "Negativo" if sentiment_score < 0 else "Neutro"
+
+    print(f"Palavra: {word} - Score: {sentiment_score} ({sentiment})")
+
+###############################################
+from gensim.corpora.dictionary import Dictionary
+from gensim.models import LdaModel
+
+# Criando um dicionário a partir dos comentários filtrados
+dictionary = Dictionary(filtred_sentences)
+corpus = [dictionary.doc2bow(text) for text in filtred_sentences]
+
+# Treinando o modelo LDA para encontrar 5 tópicos
+lda = LdaModel(corpus, num_topics=5, id2word=dictionary, passes=15)
+
+# Mostrando os tópicos identificados
+topics = lda.print_topics(num_words=5)
+for topic in topics:
+    print(topic)
+
+#################################################################
 G = nx.Graph()
 
-# Dicionário para armazenar sentimentos de cada usuário
-user_sentiments = defaultdict(list)
+# Adiciona nós (autores)
+for author in author_topic_map.keys():
+    G.add_node(author)
 
-# Processar os comentários e coletar sentimentos
-for entry in dataset:
-    author = entry.get("comments_auth", "Unknown")  # Autor do comentário
-    comment = entry.get("comments", "")
+# Adiciona arestas se os autores compartilham temas similares
+authors = list(author_topic_map.keys())
 
-    # Análise de sentimento do comentário inteiro
-    sentiment_score = analyzer.polarity_scores(comment)['compound']
+for i in range(len(authors)):
+    for j in range(i + 1, len(authors)):
+        common_topics = author_topic_map[authors[i]].intersection(author_topic_map[authors[j]])
+        if common_topics:  # Se há interseção de tópicos, cria conexão
+            G.add_edge(authors[i], authors[j], weight=len(common_topics))
 
-    # Normalizar o peso para evitar valores negativos
-    normalized_score = sentiment_score + 1  # Agora está no intervalo [0,2]
+# Desenhando o grafo (opcional)
+import matplotlib.pyplot as plt
 
-    # Salvar sentimento do usuário
-    user_sentiments[author].append(normalized_score)
-
-# Criar nós para cada usuário
-for user in user_sentiments:
-    G.add_node(user)
-
-# Criar arestas baseadas na similaridade de sentimento
-for user1, user2 in combinations(user_sentiments.keys(), 2):
-    scores1 = user_sentiments[user1]
-    scores2 = user_sentiments[user2]
-
-    # Calcular média dos sentimentos dos usuários
-    avg_sentiment1 = sum(scores1) / len(scores1)
-    avg_sentiment2 = sum(scores2) / len(scores2)
-
-    # Criar peso baseado na proximidade de sentimento
-    weight = 1 - abs(avg_sentiment1 - avg_sentiment2)  # Quanto mais próximo de 1, mais similar
-
-    if weight > 0:  # Apenas adiciona se houver alguma similaridade
-        G.add_edge(user1, user2, weight=weight)
-
-# Detectar comunidades usando Louvain
-partition = community.best_partition(G)  # Retorna um dicionário {nó: comunidade}
-
-# Exibir as comunidades detectadas
-communities = defaultdict(list)
-for node, comm_id in partition.items():
-    communities[comm_id].append(node)
-
-for comm_id, members in communities.items():
-    print(f"🔹 Comunidade {comm_id + 1}: {members}")
-
-# Desenhar o grafo colorindo as comunidades
-plt.figure(figsize=(10, 7))
-pos = nx.spring_layout(G)
-colors = [partition[node] for node in G.nodes()]
-
-nx.draw(G, pos, with_labels=True, node_color=colors, cmap=plt.cm.Set3, edge_color="gray", font_size=8)
-plt.title("Grafo de Usuários Baseado em Sentimento")
+plt.figure(figsize=(10, 6))
+nx.draw(G, with_labels=True, node_color='lightblue', edge_color='gray', node_size=2000, font_size=10)
 plt.show()
