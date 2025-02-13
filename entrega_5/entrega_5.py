@@ -64,50 +64,50 @@ for entry in dataset:
 
 print(author_topic_map)
 #################################### Word2Vec #####################################################
-all_similar_words = []  # Lista para armazenar todas as palavras similares
+# all_similar_words = []  # Lista para armazenar todas as palavras similares
 
-for i, filtred_list in enumerate(filtred_sentences):
-    model = Word2Vec([filtred_list], vector_size=100, window=10, min_count=1, workers=4, sg=1)  # Treina um modelo para cada conjunto de frases
-    valid_key_words = [word for word in key_words if word in model.wv]
-    valid_negative_words = [word for word in negative_words if word in model.wv]
+# for i, filtred_list in enumerate(filtred_sentences):
+#     model = Word2Vec([filtred_list], vector_size=100, window=10, min_count=1, workers=4, sg=1)  # Treina um modelo para cada conjunto de frases
+#     valid_key_words = [word for word in key_words if word in model.wv]
+#     valid_negative_words = [word for word in negative_words if word in model.wv]
 
-    if valid_key_words:
-        try:
-            similar_words = model.wv.most_similar(positive=valid_key_words, negative=valid_negative_words)
-            relation = [(item[0], round(item[1], 2)) for item in similar_words]
-            all_similar_words.extend(relation)  # Adiciona os resultados à lista geral
+#     if valid_key_words:
+#         try:
+#             similar_words = model.wv.most_similar(positive=valid_key_words, negative=valid_negative_words)
+#             relation = [(item[0], round(item[1], 2)) for item in similar_words]
+#             all_similar_words.extend(relation)  # Adiciona os resultados à lista geral
 
-            print(f"\n🔹 Lista {i + 1} - Palavras mais associadas:")
-            for word, score in relation:
-                print(f"{word}: {score}")
+#             print(f"\n🔹 Lista {i + 1} - Palavras mais associadas:")
+#             for word, score in relation:
+#                 print(f"{word}: {score}")
 
-        except KeyError:
-            print(f"\n⚠️ Lista {i + 1}: Não há palavras suficientes para calcular similaridade.")
-            continue  # Caso não tenha palavras suficientes, ignora e segue para a próxima lista
+#         except KeyError:
+#             print(f"\n⚠️ Lista {i + 1}: Não há palavras suficientes para calcular similaridade.")
+#             continue  # Caso não tenha palavras suficientes, ignora e segue para a próxima lista
 
-# Remove duplicatas e ordena pela pontuação de similaridade média
-from collections import defaultdict
+# # Remove duplicatas e ordena pela pontuação de similaridade média
+# from collections import defaultdict
 
-word_scores = defaultdict(list)
-for word, score in all_similar_words:
-    word_scores[word].append(score)
+# word_scores = defaultdict(list)
+# for word, score in all_similar_words:
+#     word_scores[word].append(score)
 
-# Calcula a média da pontuação de similaridade para cada palavra
-aggregated_scores = [(word, round(sum(scores) / len(scores), 2)) for word, scores in word_scores.items()]
-aggregated_scores.sort(key=lambda x: x[1], reverse=True)  # Ordena do mais similar para o menos similar
+# # Calcula a média da pontuação de similaridade para cada palavra
+# aggregated_scores = [(word, round(sum(scores) / len(scores), 2)) for word, scores in word_scores.items()]
+# aggregated_scores.sort(key=lambda x: x[1], reverse=True)  # Ordena do mais similar para o menos similar
 
-# Exibe os resultados finais agregados
-print("\n🔹 Palavras mais associadas ao conjunto completo:")
+# # Exibe os resultados finais agregados
+# print("\n🔹 Palavras mais associadas ao conjunto completo:")
 
-for word, score in aggregated_scores:
-    print(f"{word}: {score}")
+# for word, score in aggregated_scores:
+#     print(f"{word}: {score}")
 
-    related_sentences = [entry['comments'] for entry in dataset if word in entry['comments']]
-    combined_text = " ".join(related_sentences)
-    sentiment_score = analyzer.polarity_scores(combined_text)['compound']
-    sentiment = "Positivo" if sentiment_score > 0 else "Negativo" if sentiment_score < 0 else "Neutro"
+#     related_sentences = [entry['comments'] for entry in dataset if word in entry['comments']]
+#     combined_text = " ".join(related_sentences)
+#     sentiment_score = analyzer.polarity_scores(combined_text)['compound']
+#     sentiment = "Positivo" if sentiment_score > 0 else "Negativo" if sentiment_score < 0 else "Neutro"
 
-    print(f"Palavra: {word} - Score: {sentiment_score} ({sentiment})")
+#     print(f"Palavra: {word} - Score: {sentiment_score} ({sentiment})")
 
 ###############################################
 from gensim.corpora.dictionary import Dictionary
@@ -144,6 +144,26 @@ for i in range(len(authors)):
 # Desenhando o grafo (opcional)
 import matplotlib.pyplot as plt
 
-plt.figure(figsize=(10, 6))
-nx.draw(G, with_labels=True, node_color='lightblue', edge_color='gray', node_size=2000, font_size=10)
+plt.figure(figsize=(12, 8))  # 🔹 Ajusta o tamanho da figura
+
+# Escolhe um layout melhor para visualização
+pos = nx.spring_layout(G, k=0.3)  # 🔹 k controla a distância entre os nós
+# pos = nx.kamada_kawai_layout(G)  # 🔹 Outra opção para evitar sobreposição
+
+# Define o tamanho dos nós com base no grau de conexões
+node_sizes = [G.degree(node) * 400 for node in G.nodes()]  # 🔹 Quanto mais conexões, maior o nó
+
+# Define as cores das arestas com base no peso (mais forte = mais escuro)
+edges = G.edges(data=True)
+edge_colors = [data['weight'] for _, _, data in edges]
+
+# Desenha o grafo
+nx.draw(G, pos, with_labels=True, node_color='lightblue', edge_color=edge_colors, 
+        width=2, node_size=node_sizes, font_size=10, edge_cmap=plt.cm.Blues)
+
+# Exibe os pesos das conexões (arestas)
+edge_labels = {(u, v): d['weight'] for u, v, d in G.edges(data=True)}
+nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=8)
+
+plt.title("🔗 Rede de Autores Baseada em Tópicos")
 plt.show()
