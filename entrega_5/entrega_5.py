@@ -140,30 +140,57 @@ for i in range(len(authors)):
         common_topics = author_topic_map[authors[i]].intersection(author_topic_map[authors[j]])
         if common_topics:  # Se há interseção de tópicos, cria conexão
             G.add_edge(authors[i], authors[j], weight=len(common_topics))
-
-# Desenhando o grafo (opcional)
+            
+import community as community_louvain  # Para detecção de comunidades
 import matplotlib.pyplot as plt
+import networkx as nx
 
-plt.figure(figsize=(12, 8))  # 🔹 Ajusta o tamanho da figura
+# Detecção das comunidades no grafo
+partition = community_louvain.best_partition(G)
 
-# Escolhe um layout melhor para visualização
-pos = nx.spring_layout(G, k=0.3)  # 🔹 k controla a distância entre os nós
-# pos = nx.kamada_kawai_layout(G)  # 🔹 Outra opção para evitar sobreposição
+# Identifica a maior comunidade
+community_sizes = {}
+for node, comm_id in partition.items():
+    community_sizes[comm_id] = community_sizes.get(comm_id, 0) + 1
 
-# Define o tamanho dos nós com base no grau de conexões
-node_sizes = [G.degree(node) * 400 for node in G.nodes()]  # 🔹 Quanto mais conexões, maior o nó
+# Obtém a maior comunidade
+largest_community_id = max(community_sizes, key=community_sizes.get)
+largest_community = [node for node, comm_id in partition.items() if comm_id == largest_community_id]
 
-# Define as cores das arestas com base no peso (mais forte = mais escuro)
+# Ajuste do tamanho dos nós com base na comunidade
+node_sizes = [800 if node in largest_community else 400 for node in G.nodes()]
+
+# Layout para melhor visualização
+pos = nx.spring_layout(G, k=0.5)
+
+# Colorindo os nós por comunidade
+node_colors = [partition[node] for node in G.nodes()]
+
+# Desenhando o grafo
+plt.figure(figsize=(12, 8))
+
+# Arestas e cores com base no peso
 edges = G.edges(data=True)
 edge_colors = [data['weight'] for _, _, data in edges]
 
 # Desenha o grafo
-nx.draw(G, pos, with_labels=True, node_color='lightblue', edge_color=edge_colors, 
-        width=2, node_size=node_sizes, font_size=10, edge_cmap=plt.cm.Blues)
+nx.draw(G, pos, with_labels=True, node_color=node_colors, edge_color=edge_colors, 
+        width=2, node_size=node_sizes, font_size=10, cmap=plt.cm.rainbow, edge_cmap=plt.cm.Blues)
 
-# Exibe os pesos das conexões (arestas)
+# Exibe os pesos das conexões
 edge_labels = {(u, v): d['weight'] for u, v, d in G.edges(data=True)}
 nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=8)
 
-plt.title("🔗 Rede de Autores Baseada em Tópicos")
+# Título
+plt.title("🔗 Rede de Autores Baseada em Tópicos com Comunidades")
 plt.show()
+
+# Plotando comunidades individualmente (para visualização detalhada)
+for comm_id in set(partition.values()):
+    community_nodes = [node for node, comm in partition.items() if comm == comm_id]
+    subgraph = G.subgraph(community_nodes)
+    plt.figure(figsize=(8, 6))
+    pos_sub = nx.spring_layout(subgraph, k=0.5)
+    nx.draw(subgraph, pos_sub, with_labels=True, node_size=600, font_size=8, node_color='lightblue', edge_color='grey')
+    plt.title(f"Comunicade {comm_id}")
+    plt.show()
