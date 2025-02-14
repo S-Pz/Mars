@@ -2,6 +2,7 @@ import nltk, json, re
 import networkx as nx
 import community as community_louvain  
 import matplotlib.pyplot as plt
+import os
 
 from gensim.corpora.dictionary import Dictionary
 from gensim.models import LdaModel
@@ -10,8 +11,13 @@ from nltk.corpus import stopwords
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 from gensim.models import Word2Vec
 from collections import defaultdict
+from collections import Counter
+from wordcloud import WordCloud
 
 ###################################Leitura de arquivo#####################################
+output_folder = "graphs"
+os.makedirs(output_folder, exist_ok=True)
+
 with open("posts_data.json", "r") as file:
     dataset = json.load(file)
 
@@ -41,8 +47,8 @@ author_topic_map = {}
 filtred_sentences = []
 
 for entry in dataset:
-    author = entry['comments_auth']
 
+    author = entry['comments_auth']
     words_tokens_comments = word_tokenize(entry['comments'])
     
     filtered_words = [
@@ -66,46 +72,46 @@ print(author_topic_map)
 analyzer = SentimentIntensityAnalyzer()
 all_similar_words = [] 
 
-for i, filtred_list in enumerate(filtred_sentences):
+# for i, filtred_list in enumerate(filtred_sentences):
 
-    model = Word2Vec([filtred_list], vector_size=100, window=10, min_count=1, workers=4, sg=1)  # Treina um modelo para cada conjunto de frases
-    valid_key_words = [word for word in key_words if word in model.wv]
-    valid_negative_words = [word for word in negative_words if word in model.wv]
+#     model = Word2Vec([filtred_list], vector_size=100, window=10, min_count=1, workers=4, sg=1)  # Treina um modelo para cada conjunto de frases
+#     valid_key_words = [word for word in key_words if word in model.wv]
+#     valid_negative_words = [word for word in negative_words if word in model.wv]
 
-    if valid_key_words:
-        try:
-            similar_words = model.wv.most_similar(positive=valid_key_words, negative=valid_negative_words)
-            relation = [(item[0], round(item[1], 2)) for item in similar_words]
-            all_similar_words.extend(relation)  # Adiciona os resultados à lista geral
+#     if valid_key_words:
+#         try:
+#             similar_words = model.wv.most_similar(positive=valid_key_words, negative=valid_negative_words)
+#             relation = [(item[0], round(item[1], 2)) for item in similar_words]
+#             all_similar_words.extend(relation)  # Adiciona os resultados à lista geral
 
-            print(f"\n🔹Lista {i + 1} - Palavras mais associadas:")
-            for word, score in relation:
-                print(f"{word}: {score}")
+#             print(f"\n🔹Lista {i + 1} - Palavras mais associadas:")
+#             for word, score in relation:
+#                 print(f"{word}: {score}")
 
-        except KeyError:
-            print(f"\n ⚠️ Lista {i + 1}: Não há palavras suficientes para calcular similaridade.")
-            continue  # Caso não tenha palavras suficientes, ignora e segue para a próxima lista
+#         except KeyError:
+#             print(f"\n ⚠️ Lista {i + 1}: Não há palavras suficientes para calcular similaridade.")
+#             continue  # Caso não tenha palavras suficientes, ignora e segue para a próxima lista
 
-# Remove palavras duplicadas
-word_scores = defaultdict(list)
-for word, score in all_similar_words:
-    word_scores[word].append(score)
+# # Remove palavras duplicadas
+# word_scores = defaultdict(list)
+# for word, score in all_similar_words:
+#     word_scores[word].append(score)
 
-# Calcula a média da pontuação de similaridade para cada palavra
-aggregated_scores = [(word, round(sum(scores) / len(scores), 2)) for word, scores in word_scores.items()]
-aggregated_scores.sort(key=lambda x: x[1], reverse=True)  # Ordena do mais similar para o menos similar
+# # Calcula a média da pontuação de similaridade para cada palavra
+# aggregated_scores = [(word, round(sum(scores) / len(scores), 2)) for word, scores in word_scores.items()]
+# aggregated_scores.sort(key=lambda x: x[1], reverse=True)  # Ordena do mais similar para o menos similar
 
-##################################### Exibe os resultados finais agregados#################################
-print("\n🔹 Palavras mais associadas ao conjunto completo:")
-for word, score in aggregated_scores:
-    print(f"{word}: {score}")
+# ##################################### Exibe os resultados finais agregados#################################
+# print("\n🔹 Palavras mais associadas ao conjunto completo:")
+# for word, score in aggregated_scores:
+#     print(f"{word}: {score}")
 
-    related_sentences = [entry['comments'] for entry in dataset if word in entry['comments']]
-    combined_text = " ".join(related_sentences)
-    sentiment_score = analyzer.polarity_scores(combined_text)['compound']
-    sentiment = "Positivo" if sentiment_score > 0 else "Negativo" if sentiment_score < 0 else "Neutro"
+#     related_sentences = [entry['comments'] for entry in dataset if word in entry['comments']]
+#     combined_text = " ".join(related_sentences)
+#     sentiment_score = analyzer.polarity_scores(combined_text)['compound']
+#     sentiment = "Positivo" if sentiment_score > 0 else "Negativo" if sentiment_score < 0 else "Neutro"
 
-    print(f"Palavra: {word} - Score: {sentiment_score} ({sentiment})")
+#     print(f"Palavra: {word} - Score: {sentiment_score} ({sentiment})")
 
 #################Dicionário a partir dos comentários filtrados e geração de tópicos#################
 dictionary = Dictionary(filtred_sentences)
@@ -135,6 +141,19 @@ for i in range(len(authors)):
             
 # Detecção das comunidades no grafo
 partition = community_louvain.best_partition(G)
+
+### mapeia assunto dos tópicos#####
+
+# Mapeia usuários para suas comunidades
+community_topics = {comm_id: [] for comm_id in set(partition.values())}
+
+for author, comm_id in partition.items():
+    if author in author_topic_map:
+        community_topics[comm_id].extend(author_topic_map[author])
+
+# Conta os tópicos mais frequentes por comunidade
+community_topic_summary = {comm_id: Counter(topics).most_common(3) for comm_id, topics in community_topics.items()}
+
 
 # Identifica a maior comunidade
 community_sizes = {}
@@ -169,15 +188,27 @@ edge_labels = {(u, v): d['weight'] for u, v, d in G.edges(data=True)}
 nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=8)
 
 # Título
-plt.title("🔗 Rede de Autores Baseada em Tópicos com Comunidades")
-plt.show()
+plt.title("Rede de Autores Baseada em Tópicos com Comunidades")
+plt.savefig(os.path.join(output_folder, "network_graph.png"))
+plt.close()
 
 # Plotando comunidades individualmente
 for comm_id in set(partition.values()):
     community_nodes = [node for node, comm in partition.items() if comm == comm_id]
     subgraph = G.subgraph(community_nodes)
-    plt.figure(figsize=(8, 6))
+    #plt.figure(figsize=(8, 6))
     pos_sub = nx.spring_layout(subgraph, k=0.5)
     nx.draw(subgraph, pos_sub, with_labels=True, node_size=600, font_size=8, node_color='lightblue', edge_color='grey')
     plt.title(f"Comunicade {comm_id}")
-    plt.show()
+    plt.savefig(os.path.join(output_folder, f"community_{comm_id}.png"))
+    plt.close()
+
+for comm_id, topics in community_topics.items():
+    wordcloud = WordCloud(width=800, height=400, background_color="white").generate(" ".join(topics))
+    
+    plt.figure(figsize=(10, 5))
+    plt.imshow(wordcloud, interpolation="bilinear")
+    plt.axis("off")
+    plt.title(f"Nuvem de palavras - Comunidade {comm_id}")
+    plt.savefig(os.path.join(output_folder, f"wordcloud_community_{comm_id}.png"))
+    plt.close()
